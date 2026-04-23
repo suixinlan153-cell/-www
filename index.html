@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>FocusMate Pro</title>
+
+<style>
+body {
+  margin:0;
+  font-family:sans-serif;
+  background:linear-gradient(135deg,#667eea,#764ba2);
+  color:white;
+}
+.app{padding:20px;}
+.grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(350px,1fr));
+  gap:20px;
+}
+.card{
+  background:rgba(255,255,255,0.15);
+  backdrop-filter:blur(10px);
+  padding:15px;
+  border-radius:15px;
+}
+input,select{
+  width:100%;
+  margin-top:5px;
+  padding:8px;
+  border-radius:8px;
+  border:none;
+}
+button{
+  margin:5px;
+  padding:5px 8px;
+  border:none;
+  border-radius:6px;
+  cursor:pointer;
+}
+
+.task{
+  background:rgba(0,0,0,0.2);
+  padding:5px;
+  margin:5px 0;
+  border-radius:8px;
+}
+
+.priority-1 { background-color: rgba(0, 255, 0, 0.3); } /* Green for 非紧急 */
+.priority-2 { background-color: rgba(0, 0, 255, 0.3); } /* Blue for 一般 */
+.priority-3 { background-color: rgba(255, 165, 0, 0.3); } /* Orange for 重要 */
+.priority-4 { background-color: rgba(255, 0, 0, 0.3); } /* Red for 非常紧急 */
+
+.timeline{
+  min-height:200px;
+  border:2px dashed white;
+  padding:10px;
+  min-height:200px;
+  border:2px dashed white;
+  padding:10px;
+}
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+}
+.calendar-day {
+  background: rgba(255,255,255,0.1);
+  padding: 10px;
+  border-radius: 8px;
+  min-height: 120px; /* Increased height */
+  overflow-y: auto;
+}
+
+#calendarCard {
+  grid-column: 1 / -1; /* Make calendar card span all columns */
+}
+.calendar-day.current-month { border: 1px solid white; }
+.calendar-day.today { border: 2px solid #667eea; }
+.calendar-day-header { font-weight: bold; text-align: center; padding: 5px; }
+.calendar-day-number { font-size: 1.2em; font-weight: bold; margin-bottom: 5px; }
+.modal { display: none; position: fixed; z-index: 1; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4); }
+.modal-content { margin: 15% auto; padding: 20px; border: 1px solid #888; width: 80%; }
+.close-button { color: #aaa; float: right; font-size: 28px; font-weight: bold; }
+.close-button:hover, .close-button:focus { color: black; text-decoration: none; cursor: pointer; }
+/* Bulk Add Date Selection */
+.calendar-day.selected-for-bulk-add {
+  border: 2px solid #FFD700; /* Gold color for selected days */
+  background-color: rgba(255, 215, 0, 0.2);
+}
+</style>
+</head>
+
+<body>
+<div class="app">
+
+<h1>🧠 FocusMate Pro</h1>
+<div id="currentTaskBar" class="card" style="margin-bottom: 20px; text-align: center; font-size: 1.2em;">当前无任务</div>
+
+<div class="grid">
+
+<!-- 添加任务 -->
+<div class="card" id="addTaskCard">
+<h3>➕ 添加任务</h3>
+<input id="taskInput" placeholder="任务名称">
+<input id="timeInput" placeholder="预计分钟">
+<input type="date" id="scheduledDateInput" title="安排日期">
+<input type="time" id="scheduledTimeInput" title="安排时间">
+<select id="priorityInput">
+<option value="1">🟢 非紧急</option>
+<option value="2">🔵 一般</option>
+<option value="3">🟠 重要</option>
+<option value="4">🔴 非常紧急</option>
+</select>
+<select id="moodInput">
+    <option value="😊">😊 开心</option>
+    <option value="😐">😐 平静</option>
+    <option value="📚">📚 学习</option>
+    <option value="💪">💪 努力</option>
+    <option value="😴">😴 困倦</option>
+</select>
+<button onclick="addTask()">添加</button>
+            <button onclick="toggleBulkTaskDateSelection()">选择日期批量添加任务</button>
+            <button onclick="autoArrangeTasks()">AI 一键安排当天任务</button>
+        </div>
+
+        <!-- 空闲时间/作业时间 -->
+        <div class="card">
+            <h3>🗓 时间安排</h3>
+            <input type="date" id="dateInput">
+            <input type="time" id="startTimeInput">
+            <input type="time" id="endTimeInput">
+            <select id="timeTypeInput">
+                <option value="free">😴 休息时间</option>
+                <option value="work">🔵 作业时间</option>
+            </select>
+            <button onclick="addTimeSlot()">添加时间段</button>
+            <button onclick="toggleBulkDateSelection()">选择日期进行批量添加</button>
+            <input type="text" id="multiDateInput" placeholder="批量日期 (YYYY-MM-DD, ...)" style="margin-top: 10px; display: none;">
+            <button onclick="addMultipleTimeSlots()">批量添加时间段</button>
+            <div id="timeSlotsList"></div>
+        </div>
+
+        <!-- 待办 -->
+<div class="card">
+<h3>📋 当天待办</h3>
+<div id="todoList"></div>
+
+
+</div>
+
+<!-- 已完成 -->
+<div class="card">
+<h3 id="doneTasksHeading">✅ 已完成</h3>
+<button id="toggleDoneTasksButton" onclick="toggleShowAllDoneTasks()">查看所有已完成任务</button>
+<div id="doneList"></div>
+</div>
+
+<!-- 日历视图 -->
+<div class="card" id="calendarCard">
+    <h3>🗓 我的日历</h3>
+    <div id="calendarControls" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <button onclick="prevMonth()">上月</button>
+        <span id="currentMonthYear"></span>
+        <button onclick="nextMonth()">下月</button>
+    </div>
+    <div id="calendarGrid" class="calendar-grid"></div>
+</div>
+
+</div>
+</div>
+
+<script>
+let tasks = JSON.parse(localStorage.getItem("tasks")) || [];
+let doneTasks = JSON.parse(localStorage.getItem("done")) || [];
+let timeSlots = JSON.parse(localStorage.getItem("timeSlots")) || [];
+let showAllDoneTasks = false;
+let currentDate = new Date(); // Current date for calendar
+let currentSelectionMode = 'none'; // 'none', 'timeSlotBulkAdd', 'taskBulkAdd'
+
+// Render Calendar
+function renderCalendar() {
+  const calendarGrid = document.getElementById("calendarGrid");
+  const currentMonthYearSpan = document.getElementById("currentMonthYear");
+  calendarGrid.innerHTML = "";
+
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+
+  currentMonthYearSpan.innerText = `${year}年${month + 1}月`;
+
+  const firstDayOfMonth = (new Date(year, month, 1).getDay() + 6) % 7; // Adjust to make Monday the first day (0)
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const dayNames = ["一", "二", "三", "四", "五", "六", "日"];
+  dayNames.forEach(day => {
+    const dayHeader = document.createElement("div");
+    dayHeader.className = "calendar-day-header";
+    dayHeader.innerText = day;
+    calendarGrid.appendChild(dayHeader);
+  });
+
+  for (let i = 0; i < firstDayOfMonth; i++) {
+    const emptyDay = document.createElement("div");
+    calendarGrid.appendChild(emptyDay);
+  }
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dayCell = document.createElement("div");
+    dayCell.className = "calendar-day";
+    dayCell.dataset.date = `${year}-${month + 1 < 10 ? '0' + (month + 1) : month + 1}-${day < 10 ? '0' + day : day}`;
+    dayCell.ondragover = allowDrop;
+    dayCell.ondrop = drop;
+    // Modified click handler to support bulk selection
+    dayCell.onclick = () => {
+      if (currentSelectionMode === 'timeSlotBulkAdd') {
+        toggleDateSelectionForBulkAdd(dayCell.dataset.date, dayCell);
+      } else if (currentSelectionMode === 'taskBulkAdd') {
+        toggleDateSelectionForBulkAddTask(dayCell.dataset.date, dayCell);
+      } else {
+        showDayDetails(dayCell.dataset.date);
+      }
+    };
+
+    // Mark today
+    const today = new Date();
+    if (year === today.getFullYear() && month === today.getMonth() && day === today.getDate()) {
+      dayCell.classList.add("today");
+    }
+
+    // Append day number first
+    const dayNumberSpan = document.createElement("span");
+    dayNumberSpan.className = "calendar-day-number";
+    dayNumberSpan.innerText = day;
+    dayCell.appendChild(dayNumberSpan);
+
+    const currentDayTasks = tasks.filter(task => task.scheduledDate === dayCell.dataset.date);
+    const currentDayTimeSlots = timeSlots.filter(slot => slot.date === dayCell.dataset.date);
+
+    // Sort tasks by scheduledTime, then priority (higher priority first)
+    currentDayTasks.sort((a, b) => {
+      if (a.scheduledTime && b.scheduledTime) {
+        return a.scheduledTime.localeCompare(b.scheduledTime);
+      }
+      if (a.scheduledTime) return -1; // tasks with scheduledTime first
+      if (b.scheduledTime) return 1;
+      return (b.priority || 0) - (a.priority || 0); // higher priority first for unscheduled tasks
+    });
+
+    // Sort time slots by startTime
+    currentDayTimeSlots.sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+    // Render all tasks for the day
+    currentDayTasks.forEach(task => {
+      const taskDiv = document.createElement("div");
+      taskDiv.className = "task";
+      taskDiv.classList.add(`priority-${task.priority || 1}`);
+      taskDiv.draggable = true;
+      taskDiv.id = task.id;
+      taskDiv.innerHTML = `
+        ${task.mood || '😊'} ${task.text} (${task.time}min) ${task.scheduledTime || ''}
+        <button onclick="removeScheduledTask(${task.id}, '${task.scheduledDate}')">🗑</button>
+      `;
+      taskDiv.ondragstart = drag;
+      dayCell.appendChild(taskDiv);
+    });
+
+    // Render time slots for the day
+    currentDayTimeSlots.forEach(slot => {
+      const slotDiv = document.createElement("div");
+      slotDiv.className = "time-slot-container";
+      slotDiv.innerHTML = `
+        <div class="time-slot-header">${slot.startTime} - ${slot.endTime} (${slot.type === 'free' ? '休息' : '作业'}) <button onclick="removeTimeSlot(${slot.id})">🗑</button></div>
+      `;
+      dayCell.appendChild(slotDiv);
+    });
+    calendarGrid.appendChild(dayCell);
+  }
+}
+
+function prevMonth() {
+  currentDate.setMonth(currentDate.getMonth() - 1);
+  renderCalendar();
+}
+
+function nextMonth() {
+  currentDate.setMonth(currentDate.getMonth() + 1);
+  renderCalendar();
+}
+
+// --- Bulk Date Selection Functions ---
+let selectedBulkDates = []; // Stores dates selected for bulk addition
+
+function toggleBulkDateSelection() {
+  if (currentSelectionMode === 'timeSlotBulkAdd') {
+    currentSelectionMode = 'none';
+  } else {
+    currentSelectionMode = 'timeSlotBulkAdd';
+  }
+
+  const bulkSelectButton = document.querySelector("button[onclick='toggleBulkDateSelection()']");
+  if (currentSelectionMode === 'timeSlotBulkAdd') {
+    bulkSelectButton.innerText = "取消批量选择时间段";
+    bulkSelectButton.style.backgroundColor = "#FF6347"; // Tomato color
+    alert("已进入批量时间段日期选择模式。请点击日历中的日期进行选择。再次点击按钮可退出。");
+  } else {
+    bulkSelectButton.innerText = "选择日期进行批量添加";
+    bulkSelectButton.style.backgroundColor = ""; // Reset color
+    // Clear all selected dates when exiting bulk selection mode
+    selectedBulkDates = [];
+    document.querySelectorAll('.calendar-day.selected-for-bulk-add').forEach(dayCell => {
+      dayCell.classList.remove('selected-for-bulk-add');
+    });
+    alert("已退出批量时间段日期选择模式。");
+  }
+  renderCalendar(); // Re-render to update day click handlers and clear selections if exited
+}
+
+function toggleDateSelectionForBulkAdd(date, dayCellElement) {
+  const index = selectedBulkDates.indexOf(date);
+  if (index > -1) {
+    selectedBulkDates.splice(index, 1); // Deselect
+    dayCellElement.classList.remove('selected-for-bulk-add');
+  } else {
+    selectedBulkDates.push(date); // Select
+    dayCellElement.classList.add('selected-for-bulk-add');
+  }
+  console.log("Selected dates for bulk add:", selectedBulkDates);
+}
+
+let selectedBulkTaskDates = []; // Stores dates selected for bulk task addition
+
+function toggleBulkTaskDateSelection() {
+  if (currentSelectionMode === 'taskBulkAdd') {
+    currentSelectionMode = 'none';
+  } else {
+    currentSelectionMode = 'taskBulkAdd';
+  }
+
+  const bulkSelectButton = document.querySelector("button[onclick='toggleBulkTaskDateSelection()']");
+  if (currentSelectionMode === 'taskBulkAdd') {
+    bulkSelectButton.innerText = "取消批量选择任务日期";
+    bulkSelectButton.style.backgroundColor = "#FF6347"; // Tomato color
+    alert("已进入批量任务日期选择模式。请点击日历中的日期进行选择。再次点击按钮可退出。");
+  } else {
+    bulkSelectButton.innerText = "选择日期批量添加任务";
+    bulkSelectButton.style.backgroundColor = ""; // Reset color
+    // Clear all selected dates when exiting bulk selection mode
+    selectedBulkTaskDates = [];
+    document.querySelectorAll('.calendar-day.selected-for-bulk-add').forEach(dayCell => {
+      dayCell.classList.remove('selected-for-bulk-add');
+    });
+    alert("已退出批量任务日期选择模式。");
+  }
+  renderCalendar(); // Re-render to update day click handlers and clear selections if exited
+}
+
+function toggleDateSelectionForBulkAddTask(date, dayCellElement) {
+  const index = selectedBulkTaskDates.indexOf(date);
+  if (index > -1) {
+    selectedBulkTaskDates.splice(index, 1); // Deselect
+    dayCellElement.classList.remove('selected-for-bulk-add');
+  } else {
+    selectedBulkTaskDates.push(date); // Select
+    dayCellElement.classList.add('selected-for-bulk-add');
+  }
+  console.log("Selected dates for bulk task add:", selectedBulkTaskDates);
+}
+
+// Add task
+function addTask() {
+  if (editingTaskId) {
+    saveEditedTask();
+    return;
+  }
+  const taskInput = document.getElementById("taskInput");
+  const timeInput = document.getElementById("timeInput");
+  const scheduledDateInput = document.getElementById("scheduledDateInput");
+  const scheduledTimeInput = document.getElementById("scheduledTimeInput");
+  const priorityInput = document.getElementById("priorityInput");
+  const moodInput = document.getElementById("moodInput");
+
+  const taskText = taskInput.value.trim();
+  const taskTime = parseInt(timeInput.value, 10);
+  const taskScheduledDate = scheduledDateInput.value; // Get scheduled date
+  const taskScheduledTime = scheduledTimeInput.value; // Get scheduled time
+  const taskPriority = parseInt(priorityInput.value, 10);
+  const taskMood = moodInput.value;
+
+  if (taskText === "" || isNaN(taskTime) || taskTime <= 0) {
+    alert("请输入有效的任务名称和预计时间（分钟）！");
+    return;
+  }
+
+  let datesToAddTaskTo = [];
+  if (currentSelectionMode === 'taskBulkAdd' && selectedBulkTaskDates.length > 0) {
+    datesToAddTaskTo = [...selectedBulkTaskDates];
+  } else if (taskScheduledDate) {
+    datesToAddTaskTo.push(taskScheduledDate);
+  } else {
+    datesToAddTaskTo.push(undefined); // For unscheduled tasks
+  }
+
+  datesToAddTaskTo.forEach(date => {
+    const newTask = {
+      id: Date.now() + Math.random(), // Add Math.random() for unique IDs in bulk
+      text: taskText,
+      time: taskTime,
+      scheduledDate: date, // Use the date from the loop
+      scheduledTime: taskScheduledTime || undefined,
+      priority: taskPriority,
+      mood: taskMood
+    };
+    tasks.push(newTask);
+  });
+
+  save();
+
+  // Clear selected dates and exit bulk selection mode after adding
+  if (currentSelectionMode === 'taskBulkAdd') {
+    selectedBulkTaskDates = [];
+    document.querySelectorAll('.calendar-day.selected-for-bulk-add').forEach(dayCell => {
+      dayCell.classList.remove('selected-for-bulk-add');
+    });
+    currentSelectionMode = 'none'; // Exit bulk selection mode
+    // Update the button text as well
+    const bulkSelectButton = document.querySelector("button[onclick='toggleBulkTaskDateSelection()']");
+    if (bulkSelectButton) {
+      bulkSelectButton.innerText = "选择日期批量添加任务";
+      bulkSelectButton.style.backgroundColor = "";
+    }
+  }
+
+  render();
+
+  taskInput.value = "";
+  timeInput.value = "";
+  scheduledDateInput.value = ""; // Clear scheduled date input
+  scheduledTimeInput.value = ""; // Clear scheduled time input
+}
+
+// Complete task
+function complete(id) {
+  const taskIndex = tasks.findIndex(t => t.id === id);
+  if (taskIndex > -1) {
+    const [completedTask] = tasks.splice(taskIndex, 1);
+    completedTask.completedDate = new Date().toLocaleString(); // Save exact date and time
+    doneTasks.push(completedTask);
+    save();
+    render();
+  }
+}
+
+// Remove task
+function removeTask(id) {
+  tasks = tasks.filter(t => t.id !== id);
+  save();
+  render();
+}
+
+// Toggle show all done tasks
+function toggleShowAllDoneTasks() {
+  showAllDoneTasks = !showAllDoneTasks;
+  render();
+}
+
+// Render function (modified to call renderCalendar)
+function render(){
+  const todo = document.getElementById("todoList");
+  const done = document.getElementById("doneList");
+  const toggleButton = document.getElementById("toggleDoneTasksButton");
+
+  todo.innerHTML="";
+  done.innerHTML="";
+
+  const todayForTodo = new Date().toISOString().slice(0, 10); // Get today's date in YYYY-MM-DD format for todo list
+
+  const currentTasksToDisplay = tasks.filter(t => {
+    // Display tasks that are unscheduled or scheduled for today
+    return !t.scheduledDate || t.scheduledDate === todayForTodo;
+  });
+
+  currentTasksToDisplay.forEach(t=>{
+    const div=document.createElement("div");
+      div.className="task";
+      div.draggable=true;
+      div.id=t.id;
+      div.classList.add(`priority-${t.priority || 1}`);
+
+      div.innerHTML=`
+        ${t.mood || '😊'} ${t.text} (${t.time}min) ${t.scheduledDate ? ` - ${t.scheduledDate}` : ''}${t.scheduledTime ? ` ${t.scheduledTime}` : ''}
+        <br>
+        <button onclick="complete(${t.id})">✅</button>
+        <button onclick="editTask(${t.id})">✏️ 编辑</button>
+        <button onclick="removeTask(${t.id})">🗑</button>
+      `;
+
+      div.ondragstart = drag;
+      todo.appendChild(div);
+  });
+
+  const today = new Date().toLocaleDateString();
+  const tasksToDisplay = showAllDoneTasks ? doneTasks : doneTasks.filter(t => new Date(t.completedDate).toLocaleDateString() === today);
+
+  toggleButton.innerText = showAllDoneTasks ? "只显示今日已完成任务" : "查看所有已完成任务";
+
+  const doneTasksHeading = document.getElementById("doneTasksHeading");
+  if (showAllDoneTasks) {
+    doneTasksHeading.innerText = "✅ 所有已完成任务";
+  } else {
+    doneTasksHeading.innerText = "✅ 今日已完成任务";
+  }
+
+  tasksToDisplay.forEach(t=>{
+    const div=document.createElement("div");
+    div.className="task";
+    const completedTime = new Date(t.completedDate);
+    const displayTime = showAllDoneTasks 
+      ? completedTime.toLocaleString() // Full date and time for all tasks
+      : completedTime.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }); // Only time for today's tasks
+    div.innerText=`${t.text} (完成于: ${displayTime})`;
+    done.appendChild(div);
+  });
+  renderCalendar(); // Call to render the calendar
+  updateCurrentTaskDisplay(); // Update current task display
+}
+
+// Add time slot (modified to call renderCalendar instead of renderTimeSlots)
+function addTimeSlot() {
+  const date = dateInput.value;
+  const startTime = startTimeInput.value;
+  const endTime = endTimeInput.value;
+  const type = timeTypeInput.value;
+
+  if (!date || !startTime || !endTime) {
+    alert("请填写所有时间安排字段！");
+    return;
+  }
+
+  timeSlots.push({ id: Date.now(), date, startTime, endTime, type });
+  save();
+  renderCalendar(); // Re-render calendar to show new time slot
+}
+
+function addMultipleTimeSlots() {
+  const datesToAdd = [...selectedBulkDates]; // Use spread to create a copy
+
+  const startTime = startTimeInput.value;
+  const endTime = endTimeInput.value;
+  const type = timeTypeInput.value;
+
+  if (datesToAdd.length === 0 || !startTime || !endTime) {
+    alert("请选择至少一个日期并填写所有时间安排字段！");
+    return;
+  }
+
+  datesToAdd.forEach(date => {
+    timeSlots.push({ id: Date.now() + Math.random(), date, startTime, endTime, type });
+  });
+
+  save();
+  // Clear selected dates and exit bulk selection mode after adding
+  selectedBulkDates = [];
+  document.querySelectorAll('.calendar-day.selected-for-bulk-add').forEach(dayCell => {
+    dayCell.classList.remove('selected-for-bulk-add');
+  });
+  currentSelectionMode = 'none'; // Exit bulk selection mode
+  // Update the button text as well
+  const bulkSelectButton = document.querySelector("button[onclick='toggleBulkDateSelection()']");
+  if (bulkSelectButton) {
+    bulkSelectButton.innerText = "选择日期进行批量添加";
+    bulkSelectButton.style.backgroundColor = "";
+  }
+  renderCalendar();
+}
+
+// Remove time slot (modified to call renderCalendar instead of renderTimeSlots)
+function removeTimeSlot(id) {
+  timeSlots = timeSlots.filter(slot => slot.id !== id);
+  save();
+  renderCalendar(); // Re-render calendar after removing time slot
+}
+
+// 拖拽
+function drag(ev){
+  ev.dataTransfer.setData("text/plain", ev.target.id);
+  ev.dataTransfer.setData("text/html", ev.target.outerHTML); // For visual feedback
+}
+
+function allowDrop(ev){
+  ev.preventDefault();
+  // Add visual feedback for drop target
+  if (ev.target.classList.contains("calendar-day")) {
+    ev.target.style.background = "rgba(255,255,255,0.3)";
+  }
+}
+
+function drop(ev){
+  ev.preventDefault();
+  // Remove visual feedback
+  if (ev.target.classList.contains("calendar-day")) {
+    ev.target.style.background = "";
+  }
+
+  const id = ev.dataTransfer.getData("text/plain");
+  const task = tasks.find(t=>t.id==id);
+
+  if (!task) return; // Task might have been completed or removed
+
+  const targetDate = ev.target.dataset.date;
+  if (targetDate) {
+    const slot = timeSlots.find(s => s.date === targetDate && s.type === 'work');
+    if (!slot) {
+      alert("此日期没有可用的作业时间段，无法安排任务。");
+      return;
+    }
+    task.scheduledDate = targetDate;
+    save();
+    render();
+  } else {
+    // If dropped elsewhere, perhaps put it back in todo list or handle as unscheduled
+    alert("请将任务拖放到日历中的具体日期上。");
+  }
+}
+
+// Remove scheduled task from calendar
+function removeScheduledTask(id, date) {
+  const taskIndex = tasks.findIndex(t => t.id === id);
+  if (taskIndex > -1) {
+    delete tasks[taskIndex].scheduledDate; // Remove scheduledDate property
+    save();
+    render();
+  }
+}
+
+let editingTaskId = null; // Variable to store the ID of the task being edited
+
+// Show details for a specific day when clicked on calendar
+function showDayDetails(date) {
+  const timeSlotsList = document.getElementById("timeSlotsList");
+  timeSlotsList.innerHTML = `<h3>${date} 的任务与安排</h3>`; // Clear and add header
+
+  const tasksForSelectedDay = tasks.filter(task => task.scheduledDate === date);
+  const timeSlotsForSelectedDay = timeSlots.filter(slot => slot.date === date);
+
+  // Sort tasks by scheduledTime, then priority
+  tasksForSelectedDay.sort((a, b) => {
+    if (a.scheduledTime && b.scheduledTime) {
+      return a.scheduledTime.localeCompare(b.scheduledTime);
+    }
+    if (a.scheduledTime) return -1;
+    if (b.scheduledTime) return 1;
+    return (b.priority || 0) - (a.priority || 0);
+  });
+
+  // Sort time slots by startTime
+  timeSlotsForSelectedDay.sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+  // Display tasks
+  if (tasksForSelectedDay.length > 0) {
+    tasksForSelectedDay.forEach(task => {
+      const taskDiv = document.createElement("div");
+      taskDiv.className = "task";
+      taskDiv.classList.add(`priority-${task.priority || 1}`);
+      taskDiv.innerHTML = `
+        ${task.mood || '😊'} ${task.text} (${task.time}min) ${task.scheduledTime || ''}
+        <button onclick="complete(${task.id})">✅</button>
+        <button onclick="editTask(${task.id})">✏️ 编辑</button>
+        <button onclick="removeTask(${task.id})">🗑</button>
+      `;
+      timeSlotsList.appendChild(taskDiv);
+    });
+  } else {
+    const noTaskDiv = document.createElement("div");
+    noTaskDiv.innerText = "今日无任务";
+    timeSlotsList.appendChild(noTaskDiv);
+  }
+
+  // Display time slots
+  if (timeSlotsForSelectedDay.length > 0) {
+    timeSlotsForSelectedDay.forEach(slot => {
+      const slotDiv = document.createElement("div");
+      slotDiv.className = "time-slot-container";
+      slotDiv.innerHTML = `
+        <div class="time-slot-header">${slot.startTime} - ${slot.endTime} (${slot.type === 'free' ? '休息' : '作业'}) <button onclick="removeTimeSlot(${slot.id})">🗑</button></div>
+      `;
+      timeSlotsList.appendChild(slotDiv);
+    });
+  } else {
+    const noSlotDiv = document.createElement("div");
+    noSlotDiv.innerText = "今日无时间安排";
+    timeSlotsList.appendChild(noSlotDiv);
+  }
+}
+
+
+function editTask(id) {
+  const task = tasks.find(t => t.id === id);
+  if (!task) return;
+
+  document.getElementById("taskInput").value = task.text;
+  document.getElementById("timeInput").value = task.time;
+  document.getElementById("scheduledDateInput").value = task.scheduledDate || ""; // Set scheduled date
+  document.getElementById("scheduledTimeInput").value = task.scheduledTime || ""; // Set scheduled time
+  document.getElementById("priorityInput").value = task.priority;
+  document.getElementById("moodInput").value = task.mood;
+
+  document.querySelector("#addTaskCard button:first-of-type").innerText = "保存更改";
+  document.querySelector("#addTaskCard button:first-of-type").onclick = () => saveEditedTask();
+
+  // Add a cancel edit button if not already present
+  let cancelEditButton = document.getElementById("cancelEditButton");
+  if (!cancelEditButton) {
+    const addButton = document.querySelector("#addTaskCard button:first-of-type");
+    cancelEditButton = document.createElement("button");
+    cancelEditButton.id = "cancelEditButton";
+    cancelEditButton.innerText = "取消编辑";
+    cancelEditButton.onclick = cancelEdit;
+    addButton.parentNode.insertBefore(cancelEditButton, addButton.nextSibling);
+  }
+
+  editingTaskId = id; // Store the ID of the task being edited
+}
+
+function saveEditedTask() {
+  const taskInput = document.getElementById("taskInput");
+  const timeInput = document.getElementById("timeInput");
+  const scheduledDateInput = document.getElementById("scheduledDateInput");
+  const scheduledTimeInput = document.getElementById("scheduledTimeInput");
+  const priorityInput = document.getElementById("priorityInput");
+  const moodInput = document.getElementById("moodInput");
+
+  const taskText = taskInput.value.trim();
+  const taskTime = parseInt(timeInput.value, 10);
+  const taskPriority = parseInt(priorityInput.value, 10);
+  const taskMood = moodInput.value;
+
+  if (taskText === "" || isNaN(taskTime) || taskTime <= 0) {
+    alert("请输入有效的任务名称和预计时间（分钟）！");
+    return;
+  }
+
+  const taskIndex = tasks.findIndex(t => t.id === editingTaskId);
+  if (taskIndex > -1) {
+    tasks[taskIndex].text = taskText;
+    tasks[taskIndex].time = taskTime;
+    tasks[taskIndex].scheduledDate = scheduledDateInput.value || undefined; // Update scheduled date
+    tasks[taskIndex].scheduledTime = scheduledTimeInput.value || undefined; // Update scheduled time
+    tasks[taskIndex].priority = taskPriority;
+    tasks[taskIndex].mood = taskMood;
+  }
+
+  save();
+  cancelEdit(); // Reset form and buttons
+  render();
+}
+
+function cancelEdit() {
+  document.getElementById("taskInput").value = "";
+  document.getElementById("timeInput").value = "";
+  document.getElementById("scheduledDateInput").value = "";
+  document.getElementById("scheduledTimeInput").value = "";
+  document.getElementById("priorityInput").value = "1";
+  document.getElementById("moodInput").value = "😊";
+
+  document.querySelector("#addTaskCard button:first-of-type").innerText = "添加";
+  document.querySelector("#addTaskCard button:first-of-type").onclick = addTask; // Revert to original addTask function
+
+  const cancelEditButton = document.getElementById("cancelEditButton");
+  if (cancelEditButton) {
+    cancelEditButton.remove();
+  }
+
+  editingTaskId = null; // Clear the editing task ID
+}
+
+// Show day details in modal
+function showDayDetails(date) {
+  const modal = document.getElementById('dayDetailModal');
+  const modalDate = document.getElementById('modalDate');
+  const modalTasks = document.getElementById('modalTasks');
+  const modalTimeSlots = document.getElementById('modalTimeSlots');
+
+  modalDate.innerText = date; // Display the clicked date
+  modalTasks.innerHTML = '<h4>任务:</h4>';
+  modalTimeSlots.innerHTML = '<h4>时间段:</h4>';
+
+  // Filter tasks for the selected date
+  const tasksForDay = tasks.filter(task => task.scheduledDate === date);
+  if (tasksForDay.length > 0) {
+    tasksForDay.forEach(task => {
+      const taskDiv = document.createElement('div');
+      taskDiv.className = 'task';
+      taskDiv.classList.add(`priority-${task.priority || 1}`);
+      taskDiv.innerText = `${task.mood || '😊'} ${task.text} (${task.time}min) ${task.scheduledTime || ''}`;
+      modalTasks.appendChild(taskDiv);
+    });
+  } else {
+    modalTasks.innerHTML += '<p>无任务</p>';
+  }
+
+  // Filter time slots for the selected date
+  const timeSlotsForDay = timeSlots.filter(slot => slot.date === date);
+  if (timeSlotsForDay.length > 0) {
+    timeSlotsForDay.forEach(slot => {
+      const slotDiv = document.createElement('div');
+      slotDiv.className = 'task';
+      slotDiv.innerHTML = `${slot.startTime} - ${slot.endTime} (${slot.type === 'free' ? '休息' : '作业'})`;
+      modalTimeSlots.appendChild(slotDiv);
+    });
+  } else {
+    modalTimeSlots.innerHTML += '<p>无时间段</p>';
+  }
+
+  modal.style.display = 'block'; // Show the modal
+}
+
+// Close day details modal
+function closeDayDetails() {
+  document.getElementById('dayDetailModal').style.display = 'none';
+}
+
+// When the user clicks anywhere outside of the modal, close it
+window.onclick = function(event) {
+  const modal = document.getElementById('dayDetailModal');
+  if (event.target == modal) {
+    modal.style.display = 'none';
+  }
+}
+
+
+
+
+function timeToMinutes(timeStr) {
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
+// AI 安排任务
+function autoArrangeTasks() {
+  console.log("AI 正在安排任务...");
+
+  const today = new Date().toISOString().slice(0, 10); // Get today's date in YYYY-MM-DD format
+
+  // Clear previous scheduled times for tasks that are unscheduled or scheduled for today
+  tasks.forEach(task => {
+    if (!task.scheduledDate || task.scheduledDate === today) {
+      delete task.scheduledDate;
+      delete task.scheduledTime;
+    }
+  });
+
+  let tasksToSchedule = tasks.filter(t => !t.scheduledDate || t.scheduledDate === today); // Only unscheduled or today's tasks
+
+  // Sort tasks based on priority (higher first), then by shortest time
+  tasksToSchedule.sort((a, b) => {
+    if (a.priority !== b.priority) {
+      return b.priority - a.priority;
+    }
+    return a.time - b.time;
+  });
+
+  // Create a copy of time slots and sort them by date, then start time
+  let availableTimeSlots = [...timeSlots]
+    .filter(slot => slot.date === today && slot.type === 'work') // Only today's 'work' slots
+    .sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+  let scheduledTasksCount = 0;
+
+  availableTimeSlots.forEach(slot => {
+    if (tasksToSchedule.length === 0) return; // No more tasks to schedule
+
+    let slotStartTimeMinutes = timeToMinutes(slot.startTime);
+    let slotEndTimeMinutes = timeToMinutes(slot.endTime);
+    let currentSlotDuration = slotEndTimeMinutes - slotStartTimeMinutes;
+    let currentSlotDate = slot.date;
+
+    // Try to fit tasks into this slot
+    // Iterate through tasksToSchedule from the beginning (highest priority, shortest time)
+    for (let i = 0; i < tasksToSchedule.length; i++) {
+      const task = tasksToSchedule[i];
+      if (task.time <= currentSlotDuration) {
+        // Task fits into the remaining part of the slot
+        const scheduledHour = Math.floor(slotStartTimeMinutes / 60);
+        const scheduledMinute = slotStartTimeMinutes % 60;
+        const formattedScheduledTime = `${String(scheduledHour).padStart(2, '0')}:${String(scheduledMinute).padStart(2, '0')}`;
+
+        task.scheduledDate = currentSlotDate;
+        task.scheduledTime = formattedScheduledTime;
+        scheduledTasksCount++;
+
+        // Remove task from tasksToSchedule
+        tasksToSchedule.splice(i, 1);
+        i--; // Adjust index because we removed an element
+
+        // Reduce available duration of the current slot
+        currentSlotDuration -= task.time;
+        slotStartTimeMinutes += task.time;
+
+        if (tasksToSchedule.length === 0) break; // All tasks scheduled
+      }
+    }
+  });
+
+  if (scheduledTasksCount > 0) {
+    alert(`成功安排了 ${scheduledTasksCount} 个任务！`);
+  } else {
+    alert("未能安排任何任务。请检查是否有未安排任务或可用工作时间段。");
+  }
+
+  save();
+  render();
+}
+
+// Handle AI Chat Command
+function handleAIChatCommand(command) {
+  addMessageToChat("AI", "正在处理您的请求...");
+  setTimeout(() => {
+    if (command.includes("安排任务")) {
+      runAIScheduling();
+    } else {
+      addMessageToChat("AI", "抱歉，我目前只能帮助您安排任务。请尝试说“安排任务”。");
+    }
+  }, 1000);
+}
+
+// Update current task display
+function updateCurrentTaskDisplay() {
+  const currentTaskBar = document.getElementById('currentTaskBar');
+  const now = new Date();
+  const todayDateString = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')}`;
+  const currentTime = now.getHours() * 60 + now.getMinutes(); // Current time in minutes from midnight
+
+  let currentStatus = "当前无任务";
+  let isRestTime = false;
+
+  // Check for active time slots
+  const activeTimeSlot = timeSlots.find(slot => {
+    const slotDate = slot.date;
+    const [startHour, startMinute] = slot.startTime.split(':').map(Number);
+    const [endHour, endMinute] = slot.endTime.split(':').map(Number);
+    const slotStartTime = startHour * 60 + startMinute;
+    const slotEndTime = endHour * 60 + endMinute;
+
+    return slotDate === todayDateString && currentTime >= slotStartTime && currentTime < slotEndTime;
+  });
+
+  if (activeTimeSlot) {
+    if (activeTimeSlot.type === 'free') {
+      currentStatus = "休息时间 😴";
+      isRestTime = true;
+    } else if (activeTimeSlot.type === 'work') {
+      // Check for scheduled tasks within this work slot
+      // For simplicity, let's assume tasks don't have individual start/end times within a slot for now.
+      // We'll just check if there's any task scheduled for today's date.
+      const scheduledTask = tasks.find(task => task.scheduledDate === todayDateString);
+
+      if (scheduledTask) {
+        currentStatus = `当前任务: ${scheduledTask.mood || '😊'} ${scheduledTask.text} (预计${scheduledTask.time}分钟)`;
+      } else {
+        currentStatus = "作业时间，但当前无具体任务";
+      }
+    }
+  }
+
+  currentTaskBar.innerText = currentStatus;
+  currentTaskBar.style.backgroundColor = isRestTime ? 'rgba(0, 128, 0, 0.3)' : 'rgba(255, 165, 0, 0.3)'; // Green for rest, orange for work/task
+}
+
+// 保存
+function save(){
+  localStorage.setItem("tasks",JSON.stringify(tasks));
+  localStorage.setItem("done",JSON.stringify(doneTasks));
+  localStorage.setItem("timeSlots",JSON.stringify(timeSlots));
+}
+
+render();
+
+function init() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = (today.getMonth() + 1).toString().padStart(2, '0');
+  const day = today.getDate().toString().padStart(2, '0');
+  const hours = today.getHours().toString().padStart(2, '0');
+  const minutes = today.getMinutes().toString().padStart(2, '0');
+
+  document.getElementById('dateInput').value = `${year}-${month}-${day}`;
+  document.getElementById('startTimeInput').value = `${hours}:${minutes}`;
+  // Set end time to one hour later, handling day change if it goes past midnight
+  const endTime = new Date(today.getTime() + 60 * 60 * 1000);
+  const endHours = endTime.getHours().toString().padStart(2, '0');
+  const endMinutes = endTime.getMinutes().toString().padStart(2, '0');
+  document.getElementById('endTimeInput').value = `${endHours}:${endMinutes}`;
+  document.getElementById('timeTypeInput').value = 'work';
+}
+
+document.addEventListener('DOMContentLoaded', init);
+setInterval(updateCurrentTaskDisplay, 60 * 1000); // Update every minute
+</script>
+
+<!-- Day Detail Modal -->
+<div id="dayDetailModal" class="modal">
+  <div class="modal-content card">
+    <span class="close-button" onclick="closeDayDetails()">&times;</span>
+    <h3 id="modalDate"></h3>
+    <div id="modalTasks"></div>
+    <div id="modalTimeSlots"></div>
+  </div>
+</div>
+
+</body>
+</html>
